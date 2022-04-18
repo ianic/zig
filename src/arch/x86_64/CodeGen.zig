@@ -309,8 +309,9 @@ pub fn generate(
         @panic("Attempted to compile for architecture that was disabled by build configuration");
     }
 
-    assert(module_fn.owner_decl.has_tv);
-    const fn_type = module_fn.owner_decl.ty;
+    const owner_decl = bin_file.options.module.?.declPtr(module_fn.owner_decl);
+    assert(owner_decl.has_tv);
+    const fn_type = owner_decl.ty;
 
     var branch_stack = std.ArrayList(Branch).init(bin_file.allocator);
     defer {
@@ -6124,7 +6125,7 @@ fn limitImmediateType(self: *Self, operand: Air.Inst.Ref, comptime T: type) !MCV
     return mcv;
 }
 
-fn lowerDeclRef(self: *Self, tv: TypedValue, decl: *Module.Decl) InnerError!MCValue {
+fn lowerDeclRef(self: *Self, tv: TypedValue, decl_index: Module.Decl.Index) InnerError!MCValue {
     log.debug("lowerDeclRef: ty = {}, val = {}", .{ tv.ty.fmtDebug(), tv.val.fmtDebug() });
     const ptr_bits = self.target.cpu.arch.ptrBitWidth();
     const ptr_bytes: u64 = @divExact(ptr_bits, 8);
@@ -6137,7 +6138,9 @@ fn lowerDeclRef(self: *Self, tv: TypedValue, decl: *Module.Decl) InnerError!MCVa
         }
     }
 
-    decl.markAlive();
+    const module = self.bin_file.module.?;
+    const decl = module.declPtr(decl_index);
+    module.markDeclAlive(decl);
 
     if (self.bin_file.cast(link.File.Elf)) |elf_file| {
         const got = &elf_file.program_headers.items[elf_file.phdr_got_index.?];
@@ -6189,7 +6192,7 @@ fn genTypedValue(self: *Self, typed_value: TypedValue) InnerError!MCValue {
         return self.lowerDeclRef(typed_value, payload.data);
     }
     if (typed_value.val.castTag(.decl_ref_mut)) |payload| {
-        return self.lowerDeclRef(typed_value, payload.data.decl);
+        return self.lowerDeclRef(typed_value, payload.data.decl_index);
     }
 
     const target = self.target.*;

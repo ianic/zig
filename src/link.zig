@@ -417,17 +417,18 @@ pub const File = struct {
     /// Called from within the CodeGen to lower a local variable instantion as an unnamed
     /// constant. Returns the symbol index of the lowered constant in the read-only section
     /// of the final binary.
-    pub fn lowerUnnamedConst(base: *File, tv: TypedValue, decl: *Module.Decl) UpdateDeclError!u32 {
+    pub fn lowerUnnamedConst(base: *File, tv: TypedValue, decl_index: Module.Decl.Index) UpdateDeclError!u32 {
+        const decl = base.options.module.?.declPtr(decl_index);
         log.debug("lowerUnnamedConst {*} ({s})", .{ decl, decl.name });
         switch (base.tag) {
             // zig fmt: off
-            .coff  => return @fieldParentPtr(Coff,  "base", base).lowerUnnamedConst(tv, decl),
-            .elf   => return @fieldParentPtr(Elf,   "base", base).lowerUnnamedConst(tv, decl),
-            .macho => return @fieldParentPtr(MachO, "base", base).lowerUnnamedConst(tv, decl),
-            .plan9 => return @fieldParentPtr(Plan9, "base", base).lowerUnnamedConst(tv, decl),
+            .coff  => return @fieldParentPtr(Coff,  "base", base).lowerUnnamedConst(tv, decl_index),
+            .elf   => return @fieldParentPtr(Elf,   "base", base).lowerUnnamedConst(tv, decl_index),
+            .macho => return @fieldParentPtr(MachO, "base", base).lowerUnnamedConst(tv, decl_index),
+            .plan9 => return @fieldParentPtr(Plan9, "base", base).lowerUnnamedConst(tv, decl_index),
             .spirv => unreachable,
             .c     => unreachable,
-            .wasm  => unreachable,
+            .wasm  => return @fieldParentPtr(Wasm,  "base", base).lowerUnnamedConst(tv, decl_index),
             .nvptx => unreachable,
             // zig fmt: on
         }
@@ -435,19 +436,20 @@ pub const File = struct {
 
     /// May be called before or after updateDeclExports but must be called
     /// after allocateDeclIndexes for any given Decl.
-    pub fn updateDecl(base: *File, module: *Module, decl: *Module.Decl) UpdateDeclError!void {
+    pub fn updateDecl(base: *File, module: *Module, decl_index: Module.Decl.Index) UpdateDeclError!void {
+        const decl = module.declPtr(decl_index);
         log.debug("updateDecl {*} ({s}), type={}", .{ decl, decl.name, decl.ty.fmtDebug() });
         assert(decl.has_tv);
         switch (base.tag) {
             // zig fmt: off
-            .coff  => return @fieldParentPtr(Coff,  "base", base).updateDecl(module, decl),
-            .elf   => return @fieldParentPtr(Elf,   "base", base).updateDecl(module, decl),
-            .macho => return @fieldParentPtr(MachO, "base", base).updateDecl(module, decl),
-            .c     => return @fieldParentPtr(C,     "base", base).updateDecl(module, decl),
-            .wasm  => return @fieldParentPtr(Wasm,  "base", base).updateDecl(module, decl),
-            .spirv => return @fieldParentPtr(SpirV, "base", base).updateDecl(module, decl),
-            .plan9 => return @fieldParentPtr(Plan9, "base", base).updateDecl(module, decl),
-            .nvptx => return @fieldParentPtr(NvPtx, "base", base).updateDecl(module, decl),
+            .coff  => return @fieldParentPtr(Coff,  "base", base).updateDecl(module, decl_index),
+            .elf   => return @fieldParentPtr(Elf,   "base", base).updateDecl(module, decl_index),
+            .macho => return @fieldParentPtr(MachO, "base", base).updateDecl(module, decl_index),
+            .c     => return @fieldParentPtr(C,     "base", base).updateDecl(module, decl_index),
+            .wasm  => return @fieldParentPtr(Wasm,  "base", base).updateDecl(module, decl_index),
+            .spirv => return @fieldParentPtr(SpirV, "base", base).updateDecl(module, decl_index),
+            .plan9 => return @fieldParentPtr(Plan9, "base", base).updateDecl(module, decl_index),
+            .nvptx => return @fieldParentPtr(NvPtx, "base", base).updateDecl(module, decl_index),
             // zig fmt: on
         }
     }
@@ -455,8 +457,9 @@ pub const File = struct {
     /// May be called before or after updateDeclExports but must be called
     /// after allocateDeclIndexes for any given Decl.
     pub fn updateFunc(base: *File, module: *Module, func: *Module.Fn, air: Air, liveness: Liveness) UpdateDeclError!void {
+        const owner_decl = module.declPtr(func.owner_decl);
         log.debug("updateFunc {*} ({s}), type={}", .{
-            func.owner_decl, func.owner_decl.name, func.owner_decl.ty.fmtDebug(),
+            owner_decl, owner_decl.name, owner_decl.ty.fmtDebug(),
         });
         switch (base.tag) {
             // zig fmt: off

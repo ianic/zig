@@ -21,7 +21,7 @@ base: link.File,
 /// This linker backend does not try to incrementally link output C source code.
 /// Instead, it tracks all declarations in this table, and iterates over it
 /// in the flush function, stitching pre-rendered pieces of C code together.
-decl_table: std.AutoArrayHashMapUnmanaged(*const Module.Decl, DeclBlock) = .{},
+decl_table: std.AutoArrayHashMapUnmanaged(Module.Decl.Index, DeclBlock) = .{},
 /// Stores Type/Value data for `typedefs` to reference.
 /// Accumulates allocations and then there is a periodic garbage collection after flush().
 arena: std.heap.ArenaAllocator,
@@ -87,9 +87,9 @@ pub fn deinit(self: *C) void {
     self.arena.deinit();
 }
 
-pub fn freeDecl(self: *C, decl: *Module.Decl) void {
+pub fn freeDecl(self: *C, decl_index: Module.Decl.Index) void {
     const gpa = self.base.allocator;
-    if (self.decl_table.fetchSwapRemove(decl)) |kv| {
+    if (self.decl_table.fetchSwapRemove(decl_index)) |kv| {
         var decl_block = kv.value;
         decl_block.deinit(gpa);
     }
@@ -99,8 +99,8 @@ pub fn updateFunc(self: *C, module: *Module, func: *Module.Fn, air: Air, livenes
     const tracy = trace(@src());
     defer tracy.end();
 
-    const decl = func.owner_decl;
-    const gop = try self.decl_table.getOrPut(self.base.allocator, decl);
+    const decl_index = func.owner_decl;
+    const gop = try self.decl_table.getOrPut(self.base.allocator, decl_index);
     if (!gop.found_existing) {
         gop.value_ptr.* = .{};
     }
@@ -126,7 +126,7 @@ pub fn updateFunc(self: *C, module: *Module, func: *Module.Fn, air: Air, livenes
                 .gpa = module.gpa,
                 .module = module,
                 .error_msg = null,
-                .decl = decl,
+                .decl = module.declPtr(decl_index),
                 .fwd_decl = fwd_decl.toManaged(module.gpa),
                 .typedefs = typedefs.promoteContext(module.gpa, .{ .target = module.getTarget() }),
                 .typedefs_arena = self.arena.allocator(),
@@ -150,7 +150,7 @@ pub fn updateFunc(self: *C, module: *Module, func: *Module.Fn, air: Air, livenes
 
     codegen.genFunc(&function) catch |err| switch (err) {
         error.AnalysisFail => {
-            try module.failed_decls.put(module.gpa, decl, function.object.dg.error_msg.?);
+            try module.failed_decls.put(module.gpa, decl_index, function.object.dg.error_msg.?);
             return;
         },
         else => |e| return e,
@@ -287,14 +287,14 @@ pub fn flushModule(self: *C, comp: *Compilation, prog_node: *std.Progress.Node) 
 
     const decl_keys = self.decl_table.keys();
     const decl_values = self.decl_table.values();
-    for (decl_keys) |decl| {
-        assert(decl.has_tv);
-        f.remaining_decls.putAssumeCapacityNoClobber(decl, {});
+    for (decl_keys) |decl_index| {
+        assert(module.declPtr(decl_index).has_tv);
+        f.remaining_decls.putAssumeCapacityNoClobber(decl_index, {});
     }
 
     while (f.remaining_decls.popOrNull()) |kv| {
-        const decl = kv.key;
-        try flushDecl(self, &f, decl);
+        const decl_index = kv.key;
+        try flushDecl(self, &f, decl_index);
     }
 
     f.all_buffers.items[err_typedef_index] = .{
@@ -305,7 +305,8 @@ pub fn flushModule(self: *C, comp: *Compilation, prog_node: *std.Progress.Node) 
 
     // Now the function bodies.
     try f.all_buffers.ensureUnusedCapacity(gpa, f.fn_count);
-    for (decl_keys) |decl, i| {
+    for (decl_keys) |decl_index, i| {
+        const decl = module.declPtr(decl_index);
         if (decl.getFunction() != null) {
             const decl_block = &decl_values[i];
             const buf = decl_block.code.items;
@@ -325,7 +326,7 @@ pub fn flushModule(self: *C, comp: *Compilation, prog_node: *std.Progress.Node) 
 }
 
 const Flush = struct {
-    remaining_decls: std.AutoArrayHashMapUnmanaged(*const Module.Decl, void) = .{},
+    remaining_decls: std.AutoArrayHashMapUnmanaged(Module.Decl.Index, void) = .{},
     typedefs: Typedefs = .{},
     err_typedef_buf: std.ArrayListUnmanaged(u8) = .{},
     /// We collect a list of buffers to write, and write them all at once with pwritev 😎
@@ -354,7 +355,9 @@ const FlushDeclError = error{
 };
 
 /// Assumes `decl` was in the `remaining_decls` set, and has already been removed.
-fn flushDecl(self: *C, f: *Flush, decl: *const Module.Decl) FlushDeclError!void {
+fn flushDecl(self: *C, f: *Flush, decl_index: Module.Decl.Index) FlushDeclError!void {
+    const module = self.base.options.module.?;
+    const decl = module.declPtr(decl_index);
     // Before flushing any particular Decl we must ensure its
     // dependencies are already flushed, so that the order in the .c
     // file comes out correctly.
@@ -418,7 +421,7 @@ pub fn flushEmitH(module: *Module) !void {
     });
 
     for (emit_h.decl_table.keys()) |decl| {
-        const decl_emit_h = decl.getEmitH(module);
+        const decl_emit_h = emit_h.declPtr(decl);
         const buf = decl_emit_h.fwd_decl.items;
         all_buffers.appendAssumeCapacity(.{
             .iov_base = buf.ptr,

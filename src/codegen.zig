@@ -819,7 +819,9 @@ fn lowerDeclRef(
         return Result{ .appended = {} };
     }
 
-    decl.markAlive();
+    const module = bin_file.options.module.?;
+    module.markDeclAlive(decl);
+
     const vaddr = try bin_file.getDeclVAddr(decl, .{
         .parent_atom_index = reloc_info.parent_atom_index,
         .offset = code.items.len,

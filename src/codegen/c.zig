@@ -1536,7 +1536,7 @@ pub const DeclGen = struct {
     }
 
     fn renderDeclName(dg: DeclGen, writer: anytype, decl: *Decl) !void {
-        decl.markAlive();
+        dg.module.markDeclAlive(decl);
 
         if (dg.module.decl_exports.get(decl)) |exports| {
             return writer.writeAll(exports[0].options.name);

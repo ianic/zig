@@ -134,7 +134,7 @@ atom_free_lists: std.AutoHashMapUnmanaged(u16, std.ArrayListUnmanaged(*TextBlock
 /// We store them here so that we can properly dispose of any allocated
 /// memory within the atom in the incremental linker.
 /// TODO consolidate this.
-decls: std.AutoHashMapUnmanaged(*Module.Decl, ?u16) = .{},
+decls: std.AutoHashMapUnmanaged(Module.Decl.Index, ?u16) = .{},
 
 /// List of atoms that are owned directly by the linker.
 /// Currently these are only atoms that are the result of linking
@@ -178,7 +178,7 @@ const Reloc = struct {
 };
 
 const RelocTable = std.AutoHashMapUnmanaged(*TextBlock, std.ArrayListUnmanaged(Reloc));
-const UnnamedConstTable = std.AutoHashMapUnmanaged(*Module.Decl, std.ArrayListUnmanaged(*TextBlock));
+const UnnamedConstTable = std.AutoHashMapUnmanaged(Module.Decl.Index, std.ArrayListUnmanaged(*TextBlock));
 
 /// When allocating, the ideal_capacity is calculated by
 /// actual_capacity + (actual_capacity / ideal_factor)
@@ -2468,12 +2468,14 @@ pub fn updateDecl(self: *Elf, module: *Module, decl: *Module.Decl) !void {
     return self.updateDeclExports(module, decl, decl_exports);
 }
 
-pub fn lowerUnnamedConst(self: *Elf, typed_value: TypedValue, decl: *Module.Decl) !u32 {
+pub fn lowerUnnamedConst(self: *Elf, typed_value: TypedValue, decl_index: Module.Decl.Index) !u32 {
     var code_buffer = std.ArrayList(u8).init(self.base.allocator);
     defer code_buffer.deinit();
 
     const module = self.base.options.module.?;
-    const gop = try self.unnamed_const_atoms.getOrPut(self.base.allocator, decl);
+    const decl = module.declPtr(decl_index);
+
+    const gop = try self.unnamed_const_atoms.getOrPut(self.base.allocator, decl_index);
     if (!gop.found_existing) {
         gop.value_ptr.* = .{};
     }
@@ -2510,7 +2512,7 @@ pub fn lowerUnnamedConst(self: *Elf, typed_value: TypedValue, decl: *Module.Decl
         .appended => code_buffer.items,
         .fail => |em| {
             decl.analysis = .codegen_failure;
-            try module.failed_decls.put(module.gpa, decl, em);
+            try module.failed_decls.put(module.gpa, decl_index, em);
             log.err("{s}", .{em.msg});
             return error.AnalysisFail;
         },

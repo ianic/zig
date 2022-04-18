@@ -696,10 +696,10 @@ pub fn updateFunc(self: *Coff, module: *Module, func: *Module.Fn, air: Air, live
     return self.finishUpdateDecl(module, func.owner_decl, code);
 }
 
-pub fn lowerUnnamedConst(self: *Coff, tv: TypedValue, decl: *Module.Decl) !u32 {
+pub fn lowerUnnamedConst(self: *Coff, tv: TypedValue, decl_index: Module.Decl.Index) !u32 {
     _ = self;
     _ = tv;
-    _ = decl;
+    _ = decl_index;
     log.debug("TODO lowerUnnamedConst for Coff", .{});
     return error.AnalysisFail;
 }

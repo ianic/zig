@@ -1483,16 +1483,16 @@ pub const Type = extern union {
         @compileError("do not format types directly; use either ty.fmtDebug() or ty.fmt()");
     }
 
-    pub fn fmt(ty: Type, target: Target) std.fmt.Formatter(format2) {
+    pub fn fmt(ty: Type, module: *Module) std.fmt.Formatter(format2) {
         return .{ .data = .{
             .ty = ty,
-            .target = target,
+            .module = module,
         } };
     }
 
     const FormatContext = struct {
         ty: Type,
-        target: Target,
+        module: *Module,
     };
 
     fn format2(
@@ -1503,7 +1503,7 @@ pub const Type = extern union {
     ) !void {
         comptime assert(unused_format_string.len == 0);
         _ = options;
-        return print(ctx.ty, writer, ctx.target);
+        return print(ctx.ty, writer, ctx.module);
     }
 
     pub fn fmtDebug(ty: Type) std.fmt.Formatter(dump) {
@@ -1579,27 +1579,39 @@ pub const Type = extern union {
 
                 .@"struct" => {
                     const struct_obj = ty.castTag(.@"struct").?.data;
-                    return struct_obj.owner_decl.renderFullyQualifiedName(writer);
+                    return writer.print("({s} decl={d})", .{
+                        @tagName(t), struct_obj.owner_decl,
+                    });
                 },
                 .@"union", .union_tagged => {
                     const union_obj = ty.cast(Payload.Union).?.data;
-                    return union_obj.owner_decl.renderFullyQualifiedName(writer);
+                    return writer.print("({s} decl={d})", .{
+                        @tagName(t), union_obj.owner_decl,
+                    });
                 },
                 .enum_full, .enum_nonexhaustive => {
                     const enum_full = ty.cast(Payload.EnumFull).?.data;
-                    return enum_full.owner_decl.renderFullyQualifiedName(writer);
+                    return writer.print("({s} decl={d})", .{
+                        @tagName(t), enum_full.owner_decl,
+                    });
                 },
                 .enum_simple => {
                     const enum_simple = ty.castTag(.enum_simple).?.data;
-                    return enum_simple.owner_decl.renderFullyQualifiedName(writer);
+                    return writer.print("({s} decl={d})", .{
+                        @tagName(t), enum_simple.owner_decl,
+                    });
                 },
                 .enum_numbered => {
                     const enum_numbered = ty.castTag(.enum_numbered).?.data;
-                    return enum_numbered.owner_decl.renderFullyQualifiedName(writer);
+                    return writer.print("({s} decl={d})", .{
+                        @tagName(t), enum_numbered.owner_decl,
+                    });
                 },
                 .@"opaque" => {
-                    // TODO use declaration name
-                    return writer.writeAll("opaque {}");
+                    const opaque_obj = ty.castTag(.@"opaque").?.data;
+                    return writer.print("({s} decl={d})", .{
+                        @tagName(t), opaque_obj.owner_decl,
+                    });
                 },
 
                 .anyerror_void_error_union => return writer.writeAll("anyerror!void"),
@@ -1845,7 +1857,9 @@ pub const Type = extern union {
                 },
                 .error_set_inferred => {
                     const func = ty.castTag(.error_set_inferred).?.data.func;
-                    return writer.print("@typeInfo(@typeInfo(@TypeOf({s})).Fn.return_type.?).ErrorUnion.error_set", .{func.owner_decl.name});
+                    return writer.print("({s} func={d})", .{
+                        @tagName(t), func.owner_decl,
+                    });
                 },
                 .error_set_merged => {
                     const names = ty.castTag(.error_set_merged).?.data.keys();
@@ -1879,7 +1893,8 @@ pub const Type = extern union {
     }
 
     /// Prints a name suitable for `@typeName`.
-    pub fn print(ty: Type, writer: anytype, target: Target) @TypeOf(writer).Error!void {
+    pub fn print(ty: Type, writer: anytype, module: *Module) @TypeOf(writer).Error!void {
+        const target = module.getTarget();
         const t = ty.tag();
         switch (t) {
             .inferred_alloc_const => unreachable,
@@ -1951,27 +1966,33 @@ pub const Type = extern union {
 
             .@"struct" => {
                 const struct_obj = ty.castTag(.@"struct").?.data;
-                try struct_obj.owner_decl.renderFullyQualifiedName(writer);
+                const decl = module.declPtr(struct_obj.owner_decl);
+                try decl.renderFullyQualifiedName(writer);
             },
             .@"union", .union_tagged => {
                 const union_obj = ty.cast(Payload.Union).?.data;
-                try union_obj.owner_decl.renderFullyQualifiedName(writer);
+                const decl = module.declPtr(union_obj.owner_decl);
+                try decl.renderFullyQualifiedName(writer);
             },
             .enum_full, .enum_nonexhaustive => {
                 const enum_full = ty.cast(Payload.EnumFull).?.data;
-                try enum_full.owner_decl.renderFullyQualifiedName(writer);
+                const decl = module.declPtr(enum_full.owner_decl);
+                try decl.renderFullyQualifiedName(writer);
             },
             .enum_simple => {
                 const enum_simple = ty.castTag(.enum_simple).?.data;
-                try enum_simple.owner_decl.renderFullyQualifiedName(writer);
+                const decl = module.declPtr(enum_simple.owner_decl);
+                try decl.renderFullyQualifiedName(writer);
             },
             .enum_numbered => {
                 const enum_numbered = ty.castTag(.enum_numbered).?.data;
-                try enum_numbered.owner_decl.renderFullyQualifiedName(writer);
+                const decl = module.declPtr(enum_numbered.owner_decl);
+                try decl.renderFullyQualifiedName(writer);
             },
             .@"opaque" => {
                 const opaque_obj = ty.cast(Payload.Opaque).?.data;
-                try opaque_obj.owner_decl.renderFullyQualifiedName(writer);
+                const decl = module.declPtr(opaque_obj.owner_decl);
+                try decl.renderFullyQualifiedName(writer);
             },
 
             .anyerror_void_error_union => try writer.writeAll("anyerror!void"),

@@ -731,16 +731,16 @@ pub const Value = extern union {
             .int_i64 => return std.fmt.formatIntValue(val.castTag(.int_i64).?.data, "", options, out_stream),
             .int_big_positive => return out_stream.print("{}", .{val.castTag(.int_big_positive).?.asBigInt()}),
             .int_big_negative => return out_stream.print("{}", .{val.castTag(.int_big_negative).?.asBigInt()}),
-            .function => return out_stream.print("(function '{s}')", .{val.castTag(.function).?.data.owner_decl.name}),
+            .function => return out_stream.print("(function decl={d})", .{val.castTag(.function).?.data.owner_decl}),
             .extern_fn => return out_stream.writeAll("(extern function)"),
             .variable => return out_stream.writeAll("(variable)"),
             .decl_ref_mut => {
-                const decl = val.castTag(.decl_ref_mut).?.data.decl;
-                return out_stream.print("(decl_ref_mut '{s}')", .{decl.name});
+                const decl_index = val.castTag(.decl_ref_mut).?.data.decl_index;
+                return out_stream.print("(decl_ref_mut {d})", .{decl_index});
             },
             .decl_ref => {
-                const decl = val.castTag(.decl_ref).?.data;
-                return out_stream.print("(decl ref '{s}')", .{decl.name});
+                const decl_index = val.castTag(.decl_ref).?.data;
+                return out_stream.print("(decl_ref {d})", .{decl_index});
             },
             .elem_ptr => {
                 const elem_ptr = val.castTag(.elem_ptr).?.data;
@@ -2502,53 +2502,6 @@ pub const Value = extern union {
             => return hashInt(ptr_val, hasher, target),
 
             else => unreachable,
-        }
-    }
-
-    pub fn markReferencedDeclsAlive(val: Value) void {
-        switch (val.tag()) {
-            .decl_ref_mut => return val.castTag(.decl_ref_mut).?.data.decl.markAlive(),
-            .extern_fn => return val.castTag(.extern_fn).?.data.owner_decl.markAlive(),
-            .function => return val.castTag(.function).?.data.owner_decl.markAlive(),
-            .variable => return val.castTag(.variable).?.data.owner_decl.markAlive(),
-            .decl_ref => return val.cast(Payload.Decl).?.data.markAlive(),
-
-            .repeated,
-            .eu_payload,
-            .opt_payload,
-            .empty_array_sentinel,
-            => return markReferencedDeclsAlive(val.cast(Payload.SubValue).?.data),
-
-            .eu_payload_ptr,
-            .opt_payload_ptr,
-            => return markReferencedDeclsAlive(val.cast(Payload.PayloadPtr).?.data.container_ptr),
-
-            .slice => {
-                const slice = val.cast(Payload.Slice).?.data;
-                markReferencedDeclsAlive(slice.ptr);
-                markReferencedDeclsAlive(slice.len);
-            },
-
-            .elem_ptr => {
-                const elem_ptr = val.cast(Payload.ElemPtr).?.data;
-                return markReferencedDeclsAlive(elem_ptr.array_ptr);
-            },
-            .field_ptr => {
-                const field_ptr = val.cast(Payload.FieldPtr).?.data;
-                return markReferencedDeclsAlive(field_ptr.container_ptr);
-            },
-            .aggregate => {
-                for (val.castTag(.aggregate).?.data) |field_val| {
-                    markReferencedDeclsAlive(field_val);
-                }
-            },
-            .@"union" => {
-                const data = val.cast(Payload.Union).?.data;
-                markReferencedDeclsAlive(data.tag);
-                markReferencedDeclsAlive(data.val);
-            },
-
-            else => {},
         }
     }
 
@@ -5059,7 +5012,7 @@ pub const Value = extern union {
 
         pub const Decl = struct {
             base: Payload,
-            data: *Module.Decl,
+            data: Module.Decl.Index,
         };
 
         pub const Variable = struct {
@@ -5079,7 +5032,7 @@ pub const Value = extern union {
             data: Data,
 
             pub const Data = struct {
-                decl: *Module.Decl,
+                decl_index: Module.Decl.Index,
                 runtime_index: u32,
             };
         };

@@ -1,6 +1,7 @@
 const std = @import("std");
 const Type = @import("type.zig").Type;
 const Value = @import("value.zig").Value;
+const Module = @import("Module.zig");
 const Allocator = std.mem.Allocator;
 const TypedValue = @This();
 const Target = std.Target;
@@ -66,6 +67,7 @@ pub fn format(
 pub fn print(
     tv: TypedValue,
     writer: anytype,
+    mod: *Module,
     level: u8,
     target: std.Target,
 ) @TypeOf(writer).Error!void {
@@ -226,7 +228,8 @@ pub fn print(
         .extern_fn => return writer.writeAll("(extern function)"),
         .variable => return writer.writeAll("(variable)"),
         .decl_ref_mut => {
-            const decl = val.castTag(.decl_ref_mut).?.data.decl;
+            const decl_index = val.castTag(.decl_ref_mut).?.data.decl;
+            const decl = mod.declPtr(decl_index);
             if (level == 0) {
                 return writer.print("(decl ref mut '{s}')", .{decl.name});
             }
@@ -236,7 +239,8 @@ pub fn print(
             }, writer, level - 1, target);
         },
         .decl_ref => {
-            const decl = val.castTag(.decl_ref).?.data;
+            const decl_index = val.castTag(.decl_ref).?.data;
+            const decl = mod.declPtr(decl_index);
             if (level == 0) {
                 return writer.print("(decl ref '{s}')", .{decl.name});
             }

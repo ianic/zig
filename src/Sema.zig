@@ -5344,13 +5344,14 @@ fn instantiateGenericCall(
 
         // Create a Decl for the new function.
         const src_decl = namespace.getDecl();
+        const new_decl_index = try mod.allocateNewDecl(namespace, module_fn.owner_decl.src_node, src_decl.src_scope);
+        errdefer mod.destroyDecl(new_decl_index);
+        const new_decl = mod.declPtr(new_decl_index);
         // TODO better names for generic function instantiations
-        const name_index = mod.getNextAnonNameIndex();
         const decl_name = try std.fmt.allocPrintZ(gpa, "{s}__anon_{d}", .{
-            module_fn.owner_decl.name, name_index,
+            module_fn.owner_decl.name, new_decl_index,
         });
-        const new_decl = try mod.allocateNewDecl(decl_name, namespace, module_fn.owner_decl.src_node, src_decl.src_scope);
-        errdefer new_decl.destroy(mod);
+        new_decl.name = decl_name;
         new_decl.src_line = module_fn.owner_decl.src_line;
         new_decl.is_pub = module_fn.owner_decl.is_pub;
         new_decl.is_exported = module_fn.owner_decl.is_exported;
@@ -16344,8 +16345,9 @@ fn zirBuiltinExtern(
 
     // TODO check duplicate extern
 
-    const new_decl = try sema.mod.allocateNewDecl(try sema.gpa.dupeZ(u8, options.name), sema.owner_decl.src_namespace, sema.owner_decl.src_node, null);
+    const new_decl = try sema.mod.allocateNewDecl(sema.owner_decl.src_namespace, sema.owner_decl.src_node, null);
     errdefer new_decl.destroy(sema.mod);
+    new_decl.name = try sema.gpa.dupeZ(u8, options.name);
 
     var new_decl_arena = std.heap.ArenaAllocator.init(sema.gpa);
     errdefer new_decl_arena.deinit();
@@ -21945,7 +21947,8 @@ fn resolveInferredErrorSet(
     // `*Module.Fn`. Not only is the function not relevant to the inferred error set
     // in this case, it may be a generic function which would cause an assertion failure
     // if we called `ensureFuncBodyAnalyzed` on it here.
-    if (ies.func.owner_decl.ty.fnInfo().return_type.errorUnionSet().castTag(.error_set_inferred).?.data == ies) {
+    const ies_func_owner_decl = sema.mod.declPtr(ies.func.owner_decl);
+    if (ies_func_owner_decl.ty.fnInfo().return_type.errorUnionSet().castTag(.error_set_inferred).?.data == ies) {
         // In this case we are dealing with the actual InferredErrorSet object that
         // corresponds to the function, not one created to track an inline/comptime call.
         try sema.ensureFuncBodyAnalyzed(ies.func);

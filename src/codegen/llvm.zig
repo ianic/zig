@@ -2528,7 +2528,7 @@ pub const DeclGen = struct {
                 .decl_ref => return lowerDeclRefValue(dg, tv, tv.val.castTag(.decl_ref).?.data),
                 .variable => {
                     const decl = tv.val.castTag(.variable).?.data.owner_decl;
-                    decl.markAlive();
+                    dg.module.markDeclAlive(decl);
                     const val = try dg.resolveGlobalDecl(decl);
                     const llvm_var_type = try dg.llvmType(tv.ty);
                     const llvm_addrspace = dg.llvmAddressSpace(decl.@"addrspace");
@@ -2688,7 +2688,7 @@ pub const DeclGen = struct {
                     .function => tv.val.castTag(.function).?.data.owner_decl,
                     else => unreachable,
                 };
-                fn_decl.markAlive();
+                dg.module.markDeclAlive(fn_decl);
                 return dg.resolveLlvmFunction(fn_decl);
             },
             .ErrorSet => {
@@ -3050,7 +3050,7 @@ pub const DeclGen = struct {
     };
 
     fn lowerParentPtrDecl(dg: *DeclGen, ptr_val: Value, decl: *Module.Decl, ptr_child_ty: Type) Error!*const llvm.Value {
-        decl.markAlive();
+        dg.module.markDeclAlive(decl);
         var ptr_ty_payload: Type.Payload.ElemType = .{
             .base = .{ .tag = .single_mut_pointer },
             .data = decl.ty,
@@ -3240,7 +3240,7 @@ pub const DeclGen = struct {
             return self.lowerPtrToVoid(tv.ty);
         }
 
-        decl.markAlive();
+        self.module.markDeclAlive(decl);
 
         const llvm_val = if (is_fn_body)
             try self.resolveLlvmFunction(decl)

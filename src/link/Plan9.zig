@@ -276,10 +276,10 @@ pub fn updateFunc(self: *Plan9, module: *Module, func: *Module.Fn, air: Air, liv
     return self.updateFinish(decl);
 }
 
-pub fn lowerUnnamedConst(self: *Plan9, tv: TypedValue, decl: *Module.Decl) !u32 {
+pub fn lowerUnnamedConst(self: *Plan9, tv: TypedValue, decl_index: Module.Decl.Index) !u32 {
     _ = self;
     _ = tv;
-    _ = decl;
+    _ = decl_index;
     log.debug("TODO lowerUnnamedConst for Plan9", .{});
     return error.AnalysisFail;
 }

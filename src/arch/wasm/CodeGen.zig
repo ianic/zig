@@ -838,7 +838,7 @@ pub fn generate(
         .liveness = liveness,
         .values = .{},
         .code = code,
-        .decl = func.owner_decl,
+        .decl = bin_file.options.module.?.declPtr(func.owner_decl),
         .err_msg = undefined,
         .locals = .{},
         .target = bin_file.options.target,
@@ -1541,7 +1541,7 @@ fn airCall(self: *Self, inst: Air.Inst.Index, modifier: std.builtin.CallOptions.
     const ret_ty = fn_ty.fnReturnType();
     const first_param_sret = isByRef(ret_ty, self.target);
 
-    const target: ?*Decl = blk: {
+    const callee: ?*Decl = blk: {
         const func_val = self.air.value(pl_op.operand) orelse break :blk null;
 
         if (func_val.castTag(.function)) |func| {
@@ -1554,7 +1554,7 @@ fn airCall(self: *Self, inst: Air.Inst.Index, modifier: std.builtin.CallOptions.
             try self.bin_file.addOrUpdateImport(ext_decl);
             break :blk ext_decl;
         } else if (func_val.castTag(.decl_ref)) |decl_ref| {
-            break :blk decl_ref.data;
+            break :blk self.bin_file.module.?.declPtr(decl_ref.data);
         }
         return self.fail("Expected a function, but instead found type '{s}'", .{func_val.tag()});
     };
@@ -1579,7 +1579,7 @@ fn airCall(self: *Self, inst: Air.Inst.Index, modifier: std.builtin.CallOptions.
         }
     }
 
-    if (target) |direct| {
+    if (callee) |direct| {
         try self.addLabel(.call, direct.link.wasm.sym_index);
     } else {
         // in this case we call a function pointer
@@ -1918,7 +1918,8 @@ fn lowerParentPtr(self: *Self, ptr_val: Value, ptr_child_ty: Type) InnerError!WV
 }
 
 fn lowerParentPtrDecl(self: *Self, ptr_val: Value, decl: *Module.Decl) InnerError!WValue {
-    decl.markAlive();
+    const module = self.bin_file.options.module.?;
+    module.markDeclAlive(decl);
     var ptr_ty_payload: Type.Payload.ElemType = .{
         .base = .{ .tag = .single_mut_pointer },
         .data = decl.ty,
@@ -1927,14 +1928,19 @@ fn lowerParentPtrDecl(self: *Self, ptr_val: Value, decl: *Module.Decl) InnerErro
     return self.lowerDeclRefValue(.{ .ty = ptr_ty, .val = ptr_val }, decl);
 }
 
-fn lowerDeclRefValue(self: *Self, tv: TypedValue, decl: *Module.Decl) InnerError!WValue {
+fn lowerDeclRefValue(self: *Self, tv: TypedValue, decl_index: Module.Decl.Index) InnerError!WValue {
     if (tv.ty.isSlice()) {
-        return WValue{ .memory = try self.bin_file.lowerUnnamedConst(self.decl, tv) };
-    } else if (decl.ty.zigTypeTag() != .Fn and !decl.ty.hasRuntimeBitsIgnoreComptime()) {
+        return WValue{ .memory = try self.bin_file.lowerUnnamedConst(decl_index, tv) };
+    }
+
+    const module = self.bin_file.options.module.?;
+    const decl = module.declPtr(decl_index);
+    if (decl.ty.zigTypeTag() != .Fn and !decl.ty.hasRuntimeBitsIgnoreComptime()) {
         return WValue{ .imm32 = 0xaaaaaaaa };
     }
 
-    decl.markAlive();
+    module.markDeclAlive(decl);
+
     const target_sym_index = decl.link.wasm.sym_index;
     if (decl.ty.zigTypeTag() == .Fn) {
         try self.bin_file.addTableFunction(target_sym_index);

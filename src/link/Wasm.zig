@@ -606,8 +606,11 @@ fn finishUpdateDecl(self: *Wasm, decl: *Module.Decl, code: []const u8) !void {
 /// Lowers a constant typed value to a local symbol and atom.
 /// Returns the symbol index of the local
 /// The given `decl` is the parent decl whom owns the constant.
-pub fn lowerUnnamedConst(self: *Wasm, decl: *Module.Decl, tv: TypedValue) !u32 {
+pub fn lowerUnnamedConst(self: *Wasm, tv: TypedValue, decl_index: Module.Decl.Index) !u32 {
     assert(tv.ty.zigTypeTag() != .Fn); // cannot create local symbols for functions
+
+    const module = self.base.options.module.?;
+    const decl = module.declPtr(decl_index);
 
     // Create and initialize a new local symbol and atom
     const local_index = decl.link.wasm.locals.items.len;
@@ -641,7 +644,6 @@ pub fn lowerUnnamedConst(self: *Wasm, decl: *Module.Decl, tv: TypedValue) !u32 {
     var value_bytes = std.ArrayList(u8).init(self.base.allocator);
     defer value_bytes.deinit();
 
-    const module = self.base.options.module.?;
     const result = try codegen.generateSymbol(
         &self.base,
         decl.srcLoc(),
@@ -2266,12 +2268,13 @@ fn linkWithLLD(self: *Wasm, comp: *Compilation, prog_node: *std.Progress.Node) !
                         self.base.options.wasi_exec_model == .command;
                     for (module.decl_exports.values()) |exports| {
                         for (exports) |exprt| {
-                            if (skip_export_non_fn and exprt.exported_decl.ty.zigTypeTag() != .Fn) {
+                            const exported_decl = module.declPtr(exprt.exported_decl);
+                            if (skip_export_non_fn and exported_decl.ty.zigTypeTag() != .Fn) {
                                 // skip exporting symbols when we're building a WASI command
                                 // and the symbol is not a function
                                 continue;
                             }
-                            const symbol_name = exprt.exported_decl.name;
+                            const symbol_name = exported_decl.name;
                             const arg = try std.fmt.allocPrint(arena, "--export={s}", .{symbol_name});
                             try argv.append(arg);
                         }

@@ -54,7 +54,7 @@ base: link.File,
 /// This linker backend does not try to incrementally link output SPIR-V code.
 /// Instead, it tracks all declarations in this table, and iterates over it
 /// in the flush function.
-decl_table: std.AutoArrayHashMapUnmanaged(*Module.Decl, DeclGenContext) = .{},
+decl_table: std.AutoArrayHashMapUnmanaged(Module.Decl.Index, DeclGenContext) = .{},
 
 const DeclGenContext = struct {
     air: Air,
@@ -208,7 +208,8 @@ pub fn flushModule(self: *SpirV, comp: *Compilation, prog_node: *std.Progress.No
     // TODO: We're allocating an ID unconditionally now, are there
     // declarations which don't generate a result?
     // TODO: fn_link is used here, but thats probably not the right field. It will work anyway though.
-    for (self.decl_table.keys()) |decl| {
+    for (self.decl_table.keys()) |decl_index| {
+        const decl = module.declPtr(decl_index);
         if (decl.has_tv) {
             decl.fn_link.spirv.id = spv.allocId();
         }
@@ -220,7 +221,8 @@ pub fn flushModule(self: *SpirV, comp: *Compilation, prog_node: *std.Progress.No
 
     var it = self.decl_table.iterator();
     while (it.next()) |entry| {
-        const decl = entry.key_ptr.*;
+        const decl_index = entry.key_ptr.*;
+        const decl = module.declPtr(decl_index);
         if (!decl.has_tv) continue;
 
         const air = entry.value_ptr.air;
@@ -228,7 +230,7 @@ pub fn flushModule(self: *SpirV, comp: *Compilation, prog_node: *std.Progress.No
 
         // Note, if `decl` is not a function, air/liveness may be undefined.
         if (try decl_gen.gen(decl, air, liveness)) |msg| {
-            try module.failed_decls.put(module.gpa, decl, msg);
+            try module.failed_decls.put(module.gpa, decl_index, msg);
             return; // TODO: Attempt to generate more decls?
         }
     }

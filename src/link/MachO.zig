@@ -254,7 +254,7 @@ const Entry = struct {
     atom: *Atom,
 };
 
-const UnnamedConstTable = std.AutoHashMapUnmanaged(*Module.Decl, std.ArrayListUnmanaged(*Atom));
+const UnnamedConstTable = std.AutoHashMapUnmanaged(Module.Decl.Index, std.ArrayListUnmanaged(*Atom));
 
 const PendingUpdate = union(enum) {
     resolve_undef: u32,
@@ -3732,17 +3732,18 @@ pub fn updateFunc(self: *MachO, module: *Module, func: *Module.Fn, air: Air, liv
     try self.updateDeclExports(module, decl, decl_exports);
 }
 
-pub fn lowerUnnamedConst(self: *MachO, typed_value: TypedValue, decl: *Module.Decl) !u32 {
+pub fn lowerUnnamedConst(self: *MachO, typed_value: TypedValue, decl_index: Module.Decl.Index) !u32 {
     var code_buffer = std.ArrayList(u8).init(self.base.allocator);
     defer code_buffer.deinit();
 
     const module = self.base.options.module.?;
-    const gop = try self.unnamed_const_atoms.getOrPut(self.base.allocator, decl);
+    const gop = try self.unnamed_const_atoms.getOrPut(self.base.allocator, decl_index);
     if (!gop.found_existing) {
         gop.value_ptr.* = .{};
     }
     const unnamed_consts = gop.value_ptr;
 
+    const decl = module.declPtr(decl_index);
     const decl_name = try decl.getFullyQualifiedName(self.base.allocator);
     defer self.base.allocator.free(decl_name);
 
@@ -3769,7 +3770,7 @@ pub fn lowerUnnamedConst(self: *MachO, typed_value: TypedValue, decl: *Module.De
         .appended => code_buffer.items,
         .fail => |em| {
             decl.analysis = .codegen_failure;
-            try module.failed_decls.put(module.gpa, decl, em);
+            try module.failed_decls.put(module.gpa, decl_index, em);
             log.err("{s}", .{em.msg});
             return error.AnalysisFail;
         },
