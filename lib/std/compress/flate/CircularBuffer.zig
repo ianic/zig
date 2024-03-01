@@ -41,7 +41,9 @@ pub fn write(self: *Self, b: u8) void {
 
 /// Write match (back-reference to the same data slice) starting at `distance`
 /// back from current write position, and `length` of bytes.
-pub fn writeMatch(self: *Self, length: u16, distance: u16) !void {
+pub fn writeMatch(self: *Self, length_: usize, distance: usize) !void {
+    var length: usize = length_;
+
     if (self.wp < distance or
         length < consts.base_length or length > consts.max_length or
         distance < consts.min_distance or distance > consts.max_distance)
@@ -50,33 +52,37 @@ pub fn writeMatch(self: *Self, length: u16, distance: u16) !void {
     }
     assert(self.wp - self.rp < mask);
 
-    var from: usize = self.wp - distance & mask;
-    const from_end: usize = from + length;
-    var to: usize = self.wp & mask;
-    const to_end: usize = to + length;
+    while (length > 0) {
+        const from: usize = self.wp - distance & mask;
+        const from_end: usize = from + length;
+        var to: usize = self.wp & mask;
+        const to_end: usize = to + length;
 
-    self.wp += length;
+        // Fast path using memcpy.
+        // Both slices [to..to_end] or [from..from_end] are at the same circle.
+        // Loop to get non overlapping slices.
+        if (from_end < buffer_len and to_end < buffer_len) {
+            var n = distance; // number of non-overlapping bytes to copy in one iteration
+            var remaining = length;
+            while (n < remaining) {
+                @memcpy(self.buffer[to..][0..n], self.buffer[from..][0..n]);
+                to += n;
+                remaining -= n;
+                n *= 2;
+            }
+            @memcpy(self.buffer[to..][0..remaining], self.buffer[from..][0..remaining]);
 
-    // Fast path using memcpy
-    if (from_end < buffer_len and to_end < buffer_len) // start and end at the same circle
-    {
-        var cur_len = distance;
-        var remaining_len = length;
-        while (cur_len < remaining_len) {
-            @memcpy(self.buffer[to..][0..cur_len], self.buffer[from..][0..cur_len]);
-            to += cur_len;
-            remaining_len -= cur_len;
-            cur_len = cur_len * 2;
+            self.wp += length;
+            return;
         }
-        @memcpy(self.buffer[to..][0..remaining_len], self.buffer[from..][0..remaining_len]);
-        return;
-    }
 
-    // Slow byte by byte
-    while (to < to_end) {
-        self.buffer[to & mask] = self.buffer[from & mask];
-        to += 1;
-        from += 1;
+        // One of the slices [to..to_end] or [from..from_end] if over buffer end.
+        // Copy data which are on the same circle. Left other to the next loop cycle.
+        // Slices can be overlapping so copyForwards instead of @memcpy.
+        const n = @min(buffer_len - from, buffer_len - to);
+        std.mem.copyForwards(u8, self.buffer[to..][0..n], self.buffer[from..][0..n]);
+        self.wp += n;
+        length -= n;
     }
 }
 
