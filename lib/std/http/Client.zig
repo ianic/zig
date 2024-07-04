@@ -192,7 +192,7 @@ pub const ConnectionPool = struct {
 pub const Connection = struct {
     stream: net.Stream,
     /// undefined unless protocol is tls.
-    tls_client: if (!disable_tls) *std.crypto.tls23.Client(net.Stream) else void,
+    tls_client: if (!disable_tls) *std.crypto.tls23.Connection(net.Stream) else void,
 
     /// The protocol that this connection is using.
     protocol: Protocol,
@@ -1351,11 +1351,13 @@ pub fn connectTcp(client: *Client, host: []const u8, port: u16, protocol: Connec
     if (protocol == .tls) {
         if (disable_tls) unreachable;
 
-        conn.data.tls_client = try client.allocator.create(std.crypto.tls23.Client(net.Stream));
+        conn.data.tls_client = try client.allocator.create(std.crypto.tls23.Connection(net.Stream));
         errdefer client.allocator.destroy(conn.data.tls_client);
 
-        conn.data.tls_client.* = std.crypto.tls23.client(stream);
-        conn.data.tls_client.handshake(host, client.ca_bundle, .{}) catch return error.TlsInitializationFailed;
+        conn.data.tls_client.* = std.crypto.tls23.client(stream, .{
+            .host = host,
+            .root_ca = client.ca_bundle,
+        }) catch return error.TlsInitializationFailed;
     }
 
     client.connection_pool.addUsed(conn);
