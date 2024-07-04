@@ -193,7 +193,7 @@ const std = @import("std.zig");
 pub const errors = @import("crypto/errors.zig");
 
 pub const tls = @import("crypto/tls.zig");
-pub const tls23 = @import("crypto/tls23/client.zig");
+pub const tls23 = @import("crypto/tls23/main.zig");
 pub const Certificate = @import("crypto/Certificate.zig");
 
 /// Side-channels mitigations.
