@@ -1357,6 +1357,11 @@ pub fn connectTcp(client: *Client, host: []const u8, port: u16, protocol: Connec
         conn.data.tls_client.* = std.crypto.tls23.client(stream, .{
             .host = host,
             .root_ca = .{ .bundle = client.ca_bundle },
+            .key_log_callback = if (std.options.http_enable_ssl_key_log_file)
+                // Export tls keys if SSLKEYLOGFILE env is set
+                std.crypto.tls23.config.key_log.callback
+            else
+                null,
         }) catch return error.TlsInitializationFailed;
     }
 
