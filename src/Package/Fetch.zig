@@ -1239,12 +1239,14 @@ fn unpackTarball(f: *Fetch, out_dir: fs.Dir, reader: *std.Io.Reader) RunError!Un
     const arena = f.arena.allocator();
 
     var diagnostics: std.tar.Diagnostics = .{ .allocator = arena };
+    var file_writer_buffer: [4096]u8 = undefined;
 
     std.tar.pipeToFileSystem(out_dir, reader, .{
         .diagnostics = &diagnostics,
         .strip_components = 0,
         .mode_mode = .ignore,
         .exclude_empty_directories = true,
+        .file_writer_buffer = &file_writer_buffer,
     }) catch |err| return f.fail(
         f.location_tok,
         try eb.printString("unable to unpack tarball to temporary directory: {t}", .{err}),

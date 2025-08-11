@@ -128,6 +128,8 @@ pub const PipeOptions = struct {
     exclude_empty_directories: bool = false,
     /// Collects error messages during unpacking
     diagnostics: ?*Diagnostics = null,
+    /// Buffer used when writing to the file system
+    file_writer_buffer: []u8 = &.{},
 
     pub const ModeMode = enum {
         /// The mode from the tar file is completely ignored. Files are created
@@ -582,7 +584,6 @@ pub const PaxIterator = struct {
 pub fn pipeToFileSystem(dir: std.fs.Dir, reader: *std.Io.Reader, options: PipeOptions) !void {
     var file_name_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var link_name_buffer: [std.fs.max_path_bytes]u8 = undefined;
-    var file_contents_buffer: [1024]u8 = undefined;
     var it: Iterator = .init(reader, .{
         .file_name_buffer = &file_name_buffer,
         .link_name_buffer = &link_name_buffer,
@@ -611,7 +612,7 @@ pub fn pipeToFileSystem(dir: std.fs.Dir, reader: *std.Io.Reader, options: PipeOp
             .file => {
                 if (createDirAndFile(dir, file_name, fileMode(file.mode, options))) |fs_file| {
                     defer fs_file.close();
-                    var file_writer = fs_file.writer(&file_contents_buffer);
+                    var file_writer = fs_file.writer(options.file_writer_buffer);
                     try it.streamRemaining(file, &file_writer.interface);
                     try file_writer.interface.flush();
                 } else |err| {
