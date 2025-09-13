@@ -68,7 +68,12 @@ pub const Diagnostics = struct {
 
     // Returns root dir of the path, assumes non empty path.
     fn rootDir(path: []const u8, kind: FileKind) []const u8 {
-        const start_index: usize = if (path[0] == '/') 1 else 0;
+        const start_index: usize = if (path.len > 1 and path[0] == '.' and path[1] == '/')
+            2
+        else if (path[0] == '/')
+            1
+        else
+            0;
         const end_index: usize = if (path[path.len - 1] == '/') path.len - 1 else path.len;
         const buf = path[start_index..end_index];
         if (std.mem.indexOfScalarPos(u8, buf, 0, '/')) |idx| {
@@ -92,6 +97,7 @@ pub const Diagnostics = struct {
         try expectEqualStrings("a", rootDir("a/b", .directory));
         try expectEqualStrings("a", rootDir("a/b", .file));
         try expectEqualStrings("a", rootDir("a/b/c", .directory));
+        try expectEqualStrings("", rootDir("./a", .file));
     }
 
     pub fn deinit(d: *Diagnostics) void {
